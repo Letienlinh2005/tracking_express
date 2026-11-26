@@ -21,6 +21,7 @@ class Settings:
     carrier_config: Path
     log_level: str
     http_backend: str = "curl_cffi"
+    jnt_url: str = "https://jtexpress.vn/vi/tracking"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -48,6 +49,7 @@ class Settings:
             carrier_config=Path(os.getenv("CARRIER_CONFIG_PATH", "config/carriers.json")),
             log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
             http_backend=os.getenv("HTTP_BACKEND", "curl_cffi").strip(),
+            jnt_url=os.getenv("JNT_TRACKING_URL", "https://jtexpress.vn/vi/tracking"),
         )
         if settings.poll_interval < 60:
             raise ValueError("POLL_INTERVAL_SECONDS phải >= 60.")

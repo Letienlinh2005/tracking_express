@@ -29,6 +29,7 @@ class Database:
                     chat_id INTEGER NOT NULL,
                     tracking_number TEXT NOT NULL,
                     nickname TEXT NOT NULL DEFAULT '',
+                    phone_last4 TEXT NOT NULL DEFAULT '',
                     carrier TEXT NOT NULL,
                     initialized INTEGER NOT NULL DEFAULT 0,
                     last_event_time INTEGER,
@@ -63,6 +64,9 @@ class Database:
                 );
                 CREATE INDEX IF NOT EXISTS pending_messages ON outbox(delivered_at, shipment_id);
             """)
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(shipments)")}
+            if "phone_last4" not in columns:
+                db.execute("ALTER TABLE shipments ADD COLUMN phone_last4 TEXT NOT NULL DEFAULT ''")
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -76,7 +80,15 @@ class Database:
         finally:
             db.close()
 
-    def add(self, chat_id: int, number: str, nickname: str, carrier: str, limit: int) -> dict:
+    def add(
+        self,
+        chat_id: int,
+        number: str,
+        nickname: str,
+        carrier: str,
+        limit: int,
+        phone_last4: str = "",
+    ) -> dict:
         now = time.time()
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -90,9 +102,9 @@ class Database:
             if count >= limit:
                 raise OrderLimit(f"Đã đạt giới hạn {limit} đơn. Dùng /del để xóa bớt.")
             cursor = db.execute(
-                """INSERT INTO shipments(chat_id,tracking_number,nickname,carrier,created_at,updated_at)
-                   VALUES(?,?,?,?,?,?)""",
-                (chat_id, number, nickname, carrier, now, now),
+                """INSERT INTO shipments(chat_id,tracking_number,nickname,carrier,created_at,updated_at,phone_last4)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (chat_id, number, nickname, carrier, now, now, phone_last4),
             )
             return dict(
                 db.execute("SELECT * FROM shipments WHERE id=?", (cursor.lastrowid,)).fetchone()

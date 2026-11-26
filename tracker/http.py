@@ -1,4 +1,5 @@
 import asyncio
+import os
 import random
 import time
 from datetime import UTC, datetime
@@ -7,6 +8,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import requests
+from curl_cffi import CurlOpt
 from curl_cffi import requests as curl_requests
 from curl_cffi.requests.exceptions import RequestException as CurlRequestError
 
@@ -33,7 +35,12 @@ class TrackingHTTP:
         self.lock = asyncio.Lock()
         self.next_request_at = 0.0
         if backend == "curl_cffi":
-            self.session = curl_requests.Session(impersonate="chrome", use_thread_local_curl=False)
+            # CURLSSLOPT_NATIVE_CA: use Windows' trusted CA store in addition to certifi.
+            # Keep TLS peer/hostname verification enabled, including on J&T's certificate chain.
+            options = {CurlOpt.SSL_OPTIONS: 16} if os.name == "nt" else {}
+            self.session = curl_requests.Session(
+                impersonate="chrome", use_thread_local_curl=False, curl_options=options
+            )
         elif backend == "requests":
             self.session = requests.Session()
             self.session.headers["User-Agent"] = (
@@ -55,7 +62,11 @@ class TrackingHTTP:
         if parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
             raise ValueError("Endpoint phải là URL HTTPS, không chứa tài khoản/mật khẩu.")
 
-    async def request(self, method: str, url: str, **kwargs: Any) -> Any:
+    async def request(
+        self, method: str, url: str, *, response_type: str = "json", **kwargs: Any
+    ) -> Any:
+        if response_type not in {"json", "text"}:
+            raise ValueError("Unsupported response type")
         self.validate_url(url)
         async with self.lock:
             remaining = getattr(self, "cooldown_until", 0.0) - time.monotonic()
@@ -90,6 +101,8 @@ class TrackingHTTP:
                     raise TrackingError("API của hãng tạm thời lỗi; bot sẽ thử lại.")
                 if response.status_code >= 300:
                     raise TrackingError(f"API của hãng trả HTTP {response.status_code}.")
+                if response_type == "text":
+                    return response.text
                 try:
                     return response.json()
                 except ValueError:
@@ -102,6 +115,9 @@ class TrackingHTTP:
         if remaining > 0:
             raise RateLimited(remaining)
         return await self.request(method, url, **kwargs)
+
+    async def text(self, method: str, url: str, **kwargs: Any) -> str:
+        return await self.request(method, url, response_type="text", **kwargs)
 
     def close(self) -> None:
         self.session.close()

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 — 26/11/2026
+
+- Thêm adapter J&T Express Việt Nam dùng endpoint tracking HTML chính thức và BeautifulSoup.
+- Hỗ trợ `--carrier jnt`, `--phone <4 số cuối>` và dạng rút gọn `JNT...-1234` cho `/add`, `/check`, `/history`.
+- Lưu xác thực theo từng đơn/chủ đơn, tự dùng lại khi quét nền; tách nhóm request theo thông tin xác thực.
+- Tự nâng cấp SQLite để thêm `phone_last4`, giữ nguyên lịch sử và các mốc thông báo.
+- Đọc vị trí bưu cục/điểm đến tiếp theo và nhận diện đã ký nhận để dừng quét.
+- Hỗ trợ phản hồi HTML qua HTTP client và kho CA Windows, tiếp tục xác minh TLS.
+- 78 bài kiểm thử tự động đã đạt; kiểm chứng trực tiếp một vận đơn J&T do người dùng cung cấp và kiểm tra lại SPX.
+
 ## 0.1.0 — 26/11/2026
 
 ### Chức năng

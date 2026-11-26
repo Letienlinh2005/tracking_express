@@ -10,6 +10,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 from telegram.request import BaseRequest
 
 from tracker.adapters.base import TrackingError
+from tracker.adapters.jnt import JNTAdapter
 from tracker.adapters.registry import build_registry, detect_carrier
 from tracker.config import Settings
 from tracker.database import Database, DuplicateShipment
@@ -32,7 +33,8 @@ HELP = """Bot theo dõi vận đơn tự động mỗi 60 giây.
 Ví dụ: /add SPXVN0123456789 Tai nghe
 Cũng có thể dùng: /check <mã> --full
 Chọn hãng thủ công: /add <mã> --carrier spx [tên]
-Hãng: spx, ghn, ghtk, vtp. Mã chưa nhận diện được sẽ hiện nút chọn hãng.
+Hãng: spx, jnt, ghn, ghtk, vtp. Mã chưa nhận diện được sẽ hiện nút chọn hãng.
+J&T: /add <mã> --carrier jnt --phone <4 số cuối điện thoại> [tên]
 Đơn đã giao/hủy/hoàn tất hoàn hàng sẽ tự ngừng quét. /list vẫn giữ đơn để tra cứu.
 GHN/GHTK/Viettel Post cần cấu hình API trước. Bot dùng trong chat riêng."""
 
@@ -71,19 +73,41 @@ class BotHandlers:
         if "--carrier" in remaining:
             index = remaining.index("--carrier")
             if index + 1 >= len(remaining):
-                raise ValueError("Dùng --carrier spx|ghn|ghtk|vtp.")
+                raise ValueError("Dùng --carrier spx|jnt|ghn|ghtk|vtp.")
             carrier = remaining[index + 1].lower()
             del remaining[index : index + 2]
-            if carrier not in {"spx", "ghn", "ghtk", "vtp"}:
-                raise ValueError("Hãng hợp lệ: spx, ghn, ghtk, vtp.")
+            if carrier not in {"spx", "jnt", "ghn", "ghtk", "vtp"}:
+                raise ValueError("Hãng hợp lệ: spx, jnt, ghn, ghtk, vtp.")
         if any(part.startswith("--") for part in remaining):
-            raise ValueError("Tùy chọn không hợp lệ. Dùng --carrier spx|ghn|ghtk|vtp.")
+            raise ValueError("Tùy chọn không hợp lệ. Dùng --carrier spx|jnt|ghn|ghtk|vtp.")
         if remaining and not allow_nickname:
             raise ValueError("Lệnh này chỉ nhận mã vận đơn và tùy chọn --carrier.")
         nickname = " ".join(remaining)
         if len(nickname) > 100:
             raise ValueError("Tên gợi nhớ tối đa 100 ký tự.")
         return number, nickname, carrier
+
+    @classmethod
+    def parse_lookup_args(
+        cls, args: list[str], *, allow_nickname: bool
+    ) -> tuple[str, str, str | None, str]:
+        args = list(args)
+        phone = ""
+        if "--phone" in args:
+            index = args.index("--phone")
+            if args.count("--phone") != 1 or index + 1 >= len(args):
+                raise ValueError("Dùng --phone <đúng 4 số cuối điện thoại> một lần.")
+            phone = args[index + 1]
+            JNTAdapter.validate_phone(phone)
+            del args[index : index + 2]
+        if args:
+            combined = re.fullmatch(r"(JNT[A-Z0-9]+)-([0-9]{4})", args[0].upper())
+            if combined:
+                if phone and phone != combined[2]:
+                    raise ValueError("Hai giá trị 4 số cuối điện thoại không khớp nhau.")
+                args[0], phone = combined[1], combined[2]
+        number, nickname, carrier = cls.parse_args(args, allow_nickname=allow_nickname)
+        return number, nickname, carrier, phone
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if await self.authorized(update):
@@ -99,7 +123,9 @@ class BotHandlers:
             if action == "check" and "--full" in args:
                 args.remove("--full")
                 action = "history"
-            number, nickname, requested = self.parse_args(args, allow_nickname=action == "add")
+            number, nickname, requested, phone = self.parse_lookup_args(
+                args, allow_nickname=action == "add"
+            )
             stored = self.service.db.find(update.effective_chat.id, number)
             if stored and action == "add":
                 raise DuplicateShipment(
@@ -108,6 +134,7 @@ class BotHandlers:
             if stored and requested and stored["carrier"] != requested:
                 raise ValueError("Mã đã được lưu với hãng khác. /del rồi /add để đổi hãng.")
             carrier = requested or (stored["carrier"] if stored else detect_carrier(number))
+            phone = phone or (stored["phone_last4"] if stored else "")
             if not carrier:
                 # Persist no untrusted nickname in callback_data; use a bounded, expiring selection.
                 key = secrets.token_hex(8)
@@ -117,6 +144,7 @@ class BotHandlers:
                     "number": number,
                     "nickname": nickname,
                     "action": action,
+                    "phone_last4": phone,
                 }
                 buttons = [
                     [
@@ -132,7 +160,7 @@ class BotHandlers:
                     reply_markup=InlineKeyboardMarkup(buttons),
                 )
                 return
-            await self.execute(update, context, action, number, nickname, carrier)
+            await self.execute(update, context, action, number, nickname, carrier, phone)
         except (ValueError, TrackingError) as error:
             await update.effective_message.reply_text(str(error))
 
@@ -197,6 +225,7 @@ class BotHandlers:
                 selection["number"],
                 selection["nickname"],
                 carrier,
+                selection.get("phone_last4", ""),
             )
         except (ValueError, TrackingError) as error:
             await update.effective_message.reply_text(str(error))
@@ -209,10 +238,15 @@ class BotHandlers:
         number: str,
         nickname: str,
         carrier: str,
+        phone_last4: str = "",
     ) -> None:
         chat_id = update.effective_chat.id
+        if carrier == "jnt":
+            JNTAdapter.validate_phone(phone_last4)
+        elif phone_last4:
+            raise ValueError("Tùy chọn --phone chỉ dùng cho J&T Express.")
         if action == "add":
-            row, error = await self.service.add(chat_id, number, nickname, carrier)
+            row, error = await self.service.add(chat_id, number, nickname, carrier, phone_last4)
             if error:
                 await update.effective_message.reply_text(
                     f"Đã lưu {number}. Chưa lấy được trạng thái: {error}\nBot sẽ tự thử lại. Xem /list để kiểm tra."
@@ -220,7 +254,7 @@ class BotHandlers:
             else:
                 await self.service.deliver(context.bot, row["id"])
         elif action == "history":
-            snapshot, warning = await self.service.history(chat_id, number, carrier)
+            snapshot, warning = await self.service.history(chat_id, number, carrier, phone_last4)
             stored = self.service.db.find(chat_id, number)
             pages = format_history(
                 self.service.adapters[carrier].name,
@@ -235,7 +269,7 @@ class BotHandlers:
                     await asyncio.sleep(1.05)
                 await update.effective_message.reply_text(page)
         else:
-            snapshot = await self.service.check(chat_id, number, carrier)
+            snapshot = await self.service.check(chat_id, number, carrier, phone_last4)
             stored = self.service.db.find(chat_id, number)
             latest_is_queued = stored and any(
                 message["shipment_id"] == stored["id"]
@@ -332,6 +366,7 @@ def build_application(settings: Settings, request: BaseRequest | None = None) ->
             ]
         )
         logger.info("Registered Telegram commands: /start /add /rename /list /check /history /del")
+        logger.info("Tracking carriers: %s", ", ".join(service.adapters))
         # PTB JobQueue owns an APScheduler AsyncIOScheduler and waits for jobs at shutdown.
         application.job_queue.run_repeating(
             scan,

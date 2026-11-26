@@ -4,7 +4,7 @@ Telegram Express Tracker — bot theo dõi vận đơn tự động và gửi th
 
 Bot Python theo dõi vận đơn qua Telegram, SQLite và APScheduler. Toàn bộ mã nguồn nằm trong dự án này; không cần dịch vụ database riêng. Python **3.11 trở lên**; khuyến nghị 3.13. Các phụ thuộc chính được khóa phiên bản trong `requirements.txt`, gồm `python-telegram-bot[job-queue] 22.8`, `APScheduler 3.11.3`, `requests 2.34.2`, `curl_cffi 0.17.0`.
 
-SPX đã có adapter gọi API thật. GHN, GHTK, Viettel Post có class riêng và bộ gọi HTTP/mapping JSON hoàn chỉnh; bạn cần cung cấp endpoint và hợp đồng dữ liệu của API được phép sử dụng. Các profile ví dụ để `endpoint: null` nhằm tránh gọi nhầm endpoint. Bot thông báo rõ khi hãng chưa được cấu hình.
+SPX đã có adapter gọi API thật. J&T Express Việt Nam có adapter đọc trang tracking chính thức với 4 số cuối điện thoại xác thực theo từng đơn. GHN, GHTK, Viettel Post có class riêng và bộ gọi HTTP/mapping JSON hoàn chỉnh; bạn cần cung cấp endpoint và hợp đồng dữ liệu của API được phép sử dụng. Các profile ví dụ để `endpoint: null` nhằm tránh gọi nhầm endpoint. Bot thông báo rõ khi hãng chưa được cấu hình.
 
 Mã nguồn: [Letienlinh2005/tracking_express](https://github.com/Letienlinh2005/tracking_express). Xem [CHANGELOG.md](CHANGELOG.md) để biết các chức năng của phiên bản hiện tại.
 
@@ -48,6 +48,7 @@ Express/
 │       ├── base.py
 │       ├── registry.py
 │       ├── spx.py
+│       ├── jnt.py
 │       ├── configurable.py
 │       ├── ghn.py
 │       ├── ghtk.py
@@ -55,6 +56,7 @@ Express/
 └── tests/
     ├── conftest.py
     ├── test_tracking.py
+    ├── test_jnt.py
     └── test_bot.py
 ```
 
@@ -140,6 +142,8 @@ Chỉ cần thay token là dùng được SPX. Dừng chương trình bằng `Ct
 | `/start` | Hướng dẫn ngắn và cú pháp |
 | `/add SPXVN0123456789 Tai nghe` | Thêm đơn, quét ngay và trả trạng thái mới nhất |
 | `/add GY123456 --carrier ghn Quà tặng` | Chọn hãng rõ ràng, có tên gợi nhớ |
+| `/add JNTTEST123456 --phone 1234 Áo mới` | Thêm J&T với 4 số cuối điện thoại xác thực |
+| `/add 841234567890 --carrier jnt --phone 1234 Áo mới` | Chọn rõ J&T cho mã toàn số |
 | `/rename SPXVN0123456789 Tai nghe Sony` | Đổi tên đơn của bạn, giữ nguyên lịch sử và trạng thái |
 | `/add 123456789` | Hiện nút chọn hãng nếu không nhận diện được |
 | `/list` | Liệt kê cả đơn đang quét và đơn hoàn thành, trạng thái/thời gian gần nhất và lỗi tạm thời |
@@ -149,7 +153,7 @@ Chỉ cần thay token là dùng được SPX. Dừng chương trình bằng `Ct
 | `/check SPXVN0123456789 --full` | Cách gọi khác để xem toàn bộ hành trình |
 | `/del SPXVN0123456789` | Xóa đơn, lịch sử và thông báo chưa gửi của chính bạn |
 
-Bot nhận diện `SPXVN… → SPX`, `GY…/G8… → GHN`. Đây là quy tắc gợi ý; dùng `--carrier` để chọn đúng hãng khi tiền tố trùng. Những mã khác được hỏi bằng inline keyboard, hết hạn sau 10 phút. Nếu tạo lựa chọn mới hoặc khởi động lại bot, gửi lại lệnh để chọn.
+Bot nhận diện `SPXVN… → SPX`, `GY…/G8… → GHN`, `JNT… → J&T`. Đây là quy tắc gợi ý; dùng `--carrier` để chọn đúng hãng khi tiền tố trùng. Mã toàn số được hỏi bằng inline keyboard hoặc chọn rõ bằng `--carrier jnt`, để tránh gán nhầm các hãng khác. Lựa chọn hết hạn sau 10 phút. Nếu tạo lựa chọn mới hoặc khởi động lại bot, gửi lại lệnh để chọn.
 
 Bot hoạt động trong **chat riêng**, dữ liệu tách theo Telegram chat ID. Mặc định ai nhắn riêng cũng dùng được; để chỉ dùng cá nhân, đặt `ALLOWED_USER_IDS=123456789` hoặc nhiều ID ngăn bằng dấu phẩy. Đây là **Telegram user ID**, không phải số điện thoại hay username. Có thể lấy ID số từ dữ liệu `from.id` của update Telegram bằng Bot API hoặc công cụ Telegram mà bạn tin cậy.
 
@@ -211,6 +215,38 @@ Adapter kiểm tra `retcode == 0`, đối chiếu `data.order_info.spx_tn` nếu
 API trả mới trước; adapter đảo về cũ trước rồi sắp xếp theo thời gian. Giữ các sự kiện nội bộ trả về kể cả `display_flag=0`, phù hợp ảnh có các mốc lên xe/phân loại. Không tự suy đoán tên kho từ câu mô tả, không lấy số điện thoại/tên người nhận từ phản hồi để lưu. Thiếu thời gian/chi tiết ở một bản ghi sẽ báo lỗi cả snapshot để tránh đẩy mốc qua dữ liệu chưa xử lý được.
 
 Đây là endpoint web tracking của [SPX](https://spx.vn/vi), không có cam kết API công khai ổn định. Đã kiểm tra phản hồi trực tiếp khi triển khai ngày 26/11/2026; hãng có thể thay schema hoặc yêu cầu xác minh về sau. Khi đó sửa riêng adapter hoặc `SPX_API_URL`. Không dùng endpoint cũ `/api/v2/fleet_order/tracking/search` vì phép thử trả `data: {}`.
+
+## J&T Express Việt Nam
+
+Adapter gọi đúng form tra cứu của [J&T Việt Nam](https://jtexpress.vn/vi/tracking?type=track):
+
+```http
+GET https://jtexpress.vn/vi/tracking?type=track&billcode=<MA>&cellphone=<4_SO_CUOI>
+```
+
+Endpoint này trả **HTML**, được phân tích bằng BeautifulSoup; không phải API JSON. Mỗi kiện trong `.result_vandon` được đối chiếu đúng mã, rồi đọc `.result-vandon-item`, thời gian, ngày và chi tiết. Chỉ lấy tên kho/bưu cục từ các mẫu câu đã xác minh, không lấy tên nhân viên/người nhận làm vị trí. Thời gian nguồn là giờ Việt Nam; `TIMEZONE` chỉ thay đổi cách hiển thị. Trạng thái `Đơn hàng đã ký nhận` được đánh dấu giao thành công; đang giao, kiện có vấn đề và đang hoàn hàng tiếp tục theo dõi.
+
+Ví dụ dưới đây dùng mã/số điện thoại minh họa; thay bằng thông tin của bạn:
+
+```text
+/add JNTTEST123456 --phone 1234 Áo mới
+/add 841234567890 --carrier jnt --phone 1234 Áo mới
+/check JNTTEST123456 --phone 1234
+/history JNTTEST123456 --phone 1234
+```
+
+Với mã có tiền tố `JNT`, có thể nhập gộp `<mã>-<4 số cuối>`:
+
+```text
+/add JNTTEST123456-1234 Áo mới
+/history JNTTEST123456-1234
+```
+
+Bot lưu mã chuẩn không kèm hậu tố xác thực. Sau `/add` thành công, `/check <mã>` và `/history <mã>` tự dùng 4 số đã lưu của chính bạn, không cần nhập lại. `/rename` và `/del` dùng mã chuẩn. Tra cứu mã chưa thêm với `--phone` chỉ kiểm tra thủ công, không đăng ký theo dõi. Đơn thiếu 4 số xác thực sẽ được hướng dẫn bổ sung trước khi lưu.
+
+SQLite tự thêm cột `phone_last4` khi nâng cấp, giữ nguyên toàn bộ đơn và lịch sử cũ. Bốn số này được giữ riêng theo chủ đơn, không đưa vào tin nhắn, callback data hay log. Worker chỉ dùng chung kết quả khi cùng mã, hãng và cùng 4 số xác thực. Không dùng dữ liệu xác thực của người này để quét đơn cho người khác.
+
+Trên Windows, `curl_cffi` dùng thêm kho CA tin cậy của Windows để kiểm tra chuỗi chứng chỉ của J&T; việc xác minh TLS vẫn bật. `JNT_TRACKING_URL` có thể thay endpoint nếu website thay đổi. Nếu HTML thay cấu trúc hoặc xác thực thất bại, adapter báo lỗi và giữ nguyên mốc sự kiện đang lưu.
 
 ## Thêm endpoint GHN/GHTK/Viettel Post
 
@@ -290,6 +326,7 @@ HTTP 403/429 kích hoạt cooldown toàn bộ client theo `Retry-After` (nhận 
 | `HTTP_BACKEND` | `curl_cffi` | Client HTTP; có thể đổi thành `requests` |
 | `MAX_ORDERS_PER_CHAT` | `50` | Tổng số đơn mỗi chat, tính cả đơn hoàn thành |
 | `SPX_API_URL` | endpoint ở trên | Endpoint SPX |
+| `JNT_TRACKING_URL` | `https://jtexpress.vn/vi/tracking` | Trang tra cứu J&T Việt Nam |
 | `CARRIER_CONFIG_PATH` | `config/carriers.json` | File cấu hình hãng |
 | `LOG_LEVEL` | `INFO` | Mức log ứng dụng |
 

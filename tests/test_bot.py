@@ -286,3 +286,48 @@ def test_rename_command_updates_only_owners_name_and_all_views(settings):
             await application.post_shutdown(application)
 
     asyncio.run(scenario())
+
+
+def test_jnt_commands_reuse_verified_phone_and_keep_it_out_of_messages(settings):
+    async def scenario():
+        request = FakeTelegramRequest()
+        application = build_application(settings, request)
+        service = application.bot_data["service"]
+        event = TrackingEvent(time=1795657268, status="Đang giao hàng", detail="Đang giao hàng")
+        carrier = Mock(configured=True, track=AsyncMock(return_value=Snapshot((event,))))
+        carrier.name = "J&T Express"
+        service.adapters["jnt"] = carrier
+        await application.initialize()
+        try:
+            await application.process_update(
+                command_update(application.bot, "/add JNTTEST123456 Áo mới")
+            )
+            assert "4 số cuối" in request.sent_texts()[-1]
+            assert service.db.list_chat(1) == []
+            await application.process_update(
+                command_update(application.bot, "/add JNTTEST123456-0123 Áo mới")
+            )
+            row = service.db.find(1, "JNTTEST123456")
+            assert row["phone_last4"] == "0123"
+            assert "📦 JNTTEST123456 Áo mới" in request.sent_texts()[-1]
+            for command in ("/check JNTTEST123456", "/history JNTTEST123456", "/list"):
+                await application.process_update(command_update(application.bot, command))
+                assert "0123" not in request.sent_texts()[-1]
+                assert "Áo mới" in request.sent_texts()[-1]
+            assert all(
+                call.kwargs == {"phone_last4": "0123"} for call in carrier.track.call_args_list
+            )
+            await application.process_update(
+                command_update(application.bot, "/check 841234567890 --carrier jnt --phone 9999")
+            )
+            assert carrier.track.call_args.kwargs == {"phone_last4": "9999"}
+            assert service.db.find(1, "841234567890") is None
+            await application.process_update(
+                command_update(application.bot, "/check SPXVN123 --phone 0123")
+            )
+            assert "chỉ dùng cho J&T" in request.sent_texts()[-1]
+        finally:
+            await application.shutdown()
+            await application.post_shutdown(application)
+
+    asyncio.run(scenario())
