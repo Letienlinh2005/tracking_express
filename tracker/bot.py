@@ -35,7 +35,8 @@ Cũng có thể dùng: /check <mã> --full
 Chọn hãng thủ công: /add <mã> --carrier spx [tên]
 Hãng: spx, jnt, ghn, ghtk, vtp. Mã chưa nhận diện được sẽ hiện nút chọn hãng.
 J&T: /add <mã> --carrier jnt --phone <4 số cuối điện thoại> [tên]
-Đơn đã giao/hủy/hoàn tất hoàn hàng sẽ tự ngừng quét. /list vẫn giữ đơn để tra cứu.
+Đơn giao thành công tự xóa sau khi gửi xong thông báo cuối.
+Đơn hủy/hoàn tất hoàn hàng ngừng quét và vẫn nằm trong /list.
 GHN/GHTK/Viettel Post cần cấu hình API trước. Bot dùng trong chat riêng."""
 
 
@@ -367,6 +368,7 @@ def build_application(settings: Settings, request: BaseRequest | None = None) ->
         )
         logger.info("Registered Telegram commands: /start /add /rename /list /check /history /del")
         logger.info("Tracking carriers: %s", ", ".join(service.adapters))
+        logger.info("Successful deliveries will be removed after all queued notifications are sent")
         # PTB JobQueue owns an APScheduler AsyncIOScheduler and waits for jobs at shutdown.
         application.job_queue.run_repeating(
             scan,

@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from tracker.statuses import is_delivered_status
+
 
 def parse_time(value: Any, local_timezone: ZoneInfo) -> int:
     """Accept Unix seconds/milliseconds or ISO-8601; never invent an event timestamp."""
@@ -35,6 +37,16 @@ class TrackingEvent:
     location: str = ""
     next_location: str = ""
     terminal: bool = False
+    delivered: bool = False
+
+    @property
+    def delivered_successfully(self) -> bool:
+        # Exact text/code fallback keeps events saved by older versions compatible.
+        return self.terminal and (
+            self.delivered
+            or self.code.casefold() == "delivered"
+            or is_delivered_status(self.status, self.detail)
+        )
 
     @property
     def key(self) -> str:

@@ -7,7 +7,8 @@
     "events_path": "events",
     "newest_first": false,
     "fields": {"time": "time", "code": "code", "status": "status", "detail": "detail", "location": "location", "next_location": "next_location"},
-    "terminal_codes": []
+    "terminal_codes": [],
+    "delivered_codes": []
   },
   "ghtk": {
     "endpoint": null,
@@ -17,7 +18,8 @@
     "events_path": "events",
     "newest_first": false,
     "fields": {"time": "time", "code": "code", "status": "status", "detail": "detail", "location": "location", "next_location": "next_location"},
-    "terminal_codes": []
+    "terminal_codes": [],
+    "delivered_codes": []
   },
   "vtp": {
     "endpoint": null,
@@ -27,6 +29,7 @@
     "events_path": "events",
     "newest_first": false,
     "fields": {"time": "time", "code": "code", "status": "status", "detail": "detail", "location": "location", "next_location": "next_location"},
-    "terminal_codes": []
+    "terminal_codes": [],
+    "delivered_codes": []
   }
 }

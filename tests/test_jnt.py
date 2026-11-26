@@ -56,6 +56,7 @@ def test_jnt_verified_form_request_and_chronological_parsing(tz):
     assert snapshot.events[1].location == "Kho A"
     assert snapshot.events[1].status == "Đang giao hàng"
     assert snapshot.latest.terminal
+    assert snapshot.latest.delivered_successfully
     assert snapshot.latest.status == "Đã giao thành công"
     assert snapshot.latest.location == ""
     assert "<font" not in snapshot.latest.detail

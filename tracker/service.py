@@ -176,6 +176,9 @@ class TrackingService:
 
     async def deliver(self, bot: Bot, shipment_id: int | None = None) -> None:
         async with self.delivery_lock:
+            removed = self.db.prune_delivered(shipment_id)
+            if removed:
+                logger.info("Removed %d delivered shipments with no pending notifications", removed)
             if time.monotonic() < self.telegram_cooldown_until:
                 return
             blocked_shipments: set[int] = set()
@@ -210,4 +213,6 @@ class TrackingService:
                     blocked_shipments.add(sid)
                 else:
                     self.db.mark_sent(message["id"])
+                    if self.db.prune_delivered(sid):
+                        logger.info("Removed delivered shipment after its final notification")
                     await asyncio.sleep(0.05)

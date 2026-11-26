@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from tracker.adapters.base import CarrierAdapter, NotConfigured, TrackingError
 from tracker.http import TrackingHTTP
 from tracker.models import Snapshot, TrackingEvent, parse_time
+from tracker.statuses import is_delivered_status
 
 
 def at_path(value: Any, path: str, default: Any = None) -> Any:
@@ -106,16 +107,20 @@ class ConfigurableJSONAdapter(CarrierAdapter):
                 raise TrackingError(f"{self.name}: mapping chi tiết trạng thái không hợp lệ.")
             code = str(field("code") or "")
             # Configure exact terminal codes from your carrier contract, never guess numeric codes.
-            terminal = code in {str(c) for c in profile.get("terminal_codes", [])}
+            delivered_codes = {str(c) for c in profile.get("delivered_codes", [])}
+            terminal = code in {str(c) for c in profile.get("terminal_codes", [])} | delivered_codes
+            status = str(field("status") or detail)
             events.append(
                 TrackingEvent(
                     time=timestamp,
                     code=code,
                     detail=detail,
-                    status=str(field("status") or detail),
+                    status=status,
                     location=str(field("location") or ""),
                     next_location=str(field("next_location") or ""),
                     terminal=terminal,
+                    delivered=terminal
+                    and (code in delivered_codes or is_delivered_status(status, detail)),
                 )
             )
         return Snapshot(tuple(events))

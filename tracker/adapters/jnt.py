@@ -82,6 +82,7 @@ class JNTAdapter(CarrierAdapter):
                     location=location,
                     next_location=next_location,
                     terminal=terminal,
+                    delivered=code == "delivered",
                 )
             )
         return Snapshot(tuple(events))

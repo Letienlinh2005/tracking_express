@@ -1,16 +1,10 @@
-import unicodedata
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from tracker.adapters.base import CarrierAdapter, TrackingError
 from tracker.http import TrackingHTTP
 from tracker.models import Snapshot, TrackingEvent, parse_time
-
-
-def normalized(value: str) -> str:
-    value = unicodedata.normalize("NFKD", value.casefold().replace("đ", "d"))
-    return " ".join("".join(c for c in value if not unicodedata.combining(c)).split()).strip(". !")
-
+from tracker.statuses import is_delivered_status, normalized
 
 TERMINAL_NAMES = {
     "delivered",
@@ -60,7 +54,9 @@ SHORT_STATUSES = {
 
 def is_terminal(*values: str) -> bool:
     # Exact matches avoid stopping on "delivery failed", "returning" or "cancel requested".
-    return any(normalized(value) in TERMINAL_NAMES for value in values)
+    return is_delivered_status(*values) or any(
+        normalized(value) in TERMINAL_NAMES for value in values
+    )
 
 
 def location_name(value: Any) -> str:
@@ -129,6 +125,7 @@ class SPXAdapter(CarrierAdapter):
                     location=location_name(record.get("current_location")),
                     next_location=location_name(record.get("next_location")),
                     terminal=terminal,
+                    delivered=terminal and is_delivered_status(name, detail),
                 )
             )
         return Snapshot(tuple(events))

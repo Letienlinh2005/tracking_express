@@ -331,3 +331,34 @@ def test_jnt_commands_reuse_verified_phone_and_keep_it_out_of_messages(settings)
             await application.post_shutdown(application)
 
     asyncio.run(scenario())
+
+
+def test_adding_delivered_parcel_replies_before_automatically_removing_it(settings):
+    async def scenario():
+        request = FakeTelegramRequest()
+        application = build_application(settings, request)
+        service = application.bot_data["service"]
+        event = TrackingEvent(
+            time=1795657268,
+            status="Đã giao thành công",
+            detail="Đã giao thành công",
+            terminal=True,
+            delivered=True,
+        )
+        carrier = Mock(configured=True, track=AsyncMock(return_value=Snapshot((event,))))
+        carrier.name = "SPX"
+        service.adapters["spx"] = carrier
+        await application.initialize()
+        try:
+            await application.process_update(
+                command_update(application.bot, "/add SPXVN123 Tai nghe")
+            )
+            assert "Đã giao thành công" in request.sent_texts()[-1]
+            assert service.db.find(1, "SPXVN123") is None
+            await application.process_update(command_update(application.bot, "/list"))
+            assert "Chưa có đơn nào" in request.sent_texts()[-1]
+        finally:
+            await application.shutdown()
+            await application.post_shutdown(application)
+
+    asyncio.run(scenario())

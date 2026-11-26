@@ -38,6 +38,7 @@ Express/
 │   ├── __main__.py
 │   ├── config.py
 │   ├── models.py
+│   ├── statuses.py
 │   ├── formatting.py
 │   ├── database.py
 │   ├── http.py
@@ -56,6 +57,7 @@ Express/
 └── tests/
     ├── conftest.py
     ├── test_tracking.py
+    ├── test_delivery_cleanup.py
     ├── test_jnt.py
     └── test_bot.py
 ```
@@ -146,7 +148,7 @@ Chỉ cần thay token là dùng được SPX. Dừng chương trình bằng `Ct
 | `/add 841234567890 --carrier jnt --phone 1234 Áo mới` | Chọn rõ J&T cho mã toàn số |
 | `/rename SPXVN0123456789 Tai nghe Sony` | Đổi tên đơn của bạn, giữ nguyên lịch sử và trạng thái |
 | `/add 123456789` | Hiện nút chọn hãng nếu không nhận diện được |
-| `/list` | Liệt kê cả đơn đang quét và đơn hoàn thành, trạng thái/thời gian gần nhất và lỗi tạm thời |
+| `/list` | Liệt kê đơn còn lưu; đơn giao thành công tự xóa sau khi gửi xong thông báo cuối |
 | `/check SPXVN0123456789` | Gọi API ngay; cũng dùng được cho mã chưa thêm |
 | `/check 123456789 --carrier vtp` | Tra cứu thủ công với hãng cụ thể |
 | `/history SPXVN0123456789` | Xem toàn bộ hành trình từ cũ đến mới, có thời gian và vị trí |
@@ -175,7 +177,8 @@ Tên gợi nhớ giới hạn 100 ký tự; mã giới hạn 3–64 ký tự. Th
 - Giao dịch SQLite ghi cả lịch sử, trạng thái và outbox một cách nguyên tử. Gửi lỗi sẽ giữ thông báo và thử lại theo backoff, không vượt qua mốc lỗi để gửi mốc sau của cùng đơn. Khởi động lại tiếp tục xử lý outbox chưa gửi, kể cả đơn đã hoàn thành.
 - `/check` trả hiện trạng ngay. Với đơn đang lưu, nếu API có các mốc mới, bot cập nhật SQLite rồi gửi các mốc đó qua outbox theo thứ tự; trạng thái mới nhất không bị gửi thêm một lần do chính lệnh đó.
 - SPX chỉ đánh dấu kết thúc khi tên/chi tiết sự kiện khớp chính xác các trạng thái hoàn tất đã khai báo trong `spx.py`. `Delivery failed`, `Returning to sender`, yêu cầu hủy và đang hoàn hàng tiếp tục được quét cho đến trạng thái cuối. Với adapter cấu hình, đặt đúng `terminal_codes` theo tài liệu API của hãng.
-- Đơn hoàn thành vẫn nằm trong `/list`; không còn được quét tự động. `/check` vẫn tra cứu thủ công được. `/del` xóa dữ liệu liên quan bằng foreign-key cascade.
+- Đơn giao thành công tự xóa sau khi toàn bộ thông báo còn chờ đã được Telegram xác nhận nhận thành công. Nếu gửi lỗi/rate-limit, đơn và thông báo vẫn được giữ để thử lại. Đơn hủy hoặc hoàn hàng ngừng quét nhưng vẫn nằm trong `/list` cho đến khi `/del`.
+- Tự xóa bao gồm dữ liệu đơn, lịch sử lưu cục bộ, 4 số xác thực và outbox qua foreign-key cascade. Các đơn giao thành công từ phiên bản cũ cũng được dọn sau khi gửi xong thông báo. `/check` và `/history` vẫn gọi API để tra cứu mã đã xóa; với J&T cần cung cấp lại `--phone` hoặc dạng `<mã>-<4 số cuối>`, và không còn bản lưu cục bộ để dùng khi API lỗi.
 
 Mẫu thông báo là plain text, đúng emoji/dòng bạn yêu cầu; nội dung API và tên được đưa về một dòng để tránh phá bố cục. Hai dòng vị trí chỉ xuất hiện khi API trả tên vị trí thật:
 
@@ -273,7 +276,8 @@ Ví dụ dưới đây là **hợp đồng JSON minh họa**, không phải URL 
       "location": "warehouse.name",
       "next_location": "next_warehouse.name"
     },
-    "terminal_codes": ["delivered", "cancelled", "returned"]
+    "terminal_codes": ["delivered", "cancelled", "returned"],
+    "delivered_codes": ["delivered"]
   }
 }
 ```
@@ -300,6 +304,7 @@ Với ví dụ đó, API cần trả dạng:
 
 - `events_path` và các field hỗ trợ key lồng nhau dạng `a.b.c`; chuỗi rỗng chỉ toàn bộ object. Không hỗ trợ JSONPath/index mảng. Thời gian nhận Unix seconds/milliseconds hoặc ISO-8601. ISO thiếu offset được hiểu theo `TIMEZONE`.
 - `success` là tùy chọn; dùng để kiểm tra mã thành công của API. `equals` so sánh đúng kiểu JSON, ví dụ số `200` khác chuỗi `"200"`.
+- `delivered_codes` chứa đúng mã giao thành công theo hợp đồng API. Các mã này đồng thời là terminal và sẽ tự xóa đơn sau thông báo cuối. Mã hủy/hoàn hàng chỉ nằm trong `terminal_codes`; không đưa chúng vào `delivered_codes`. Với trạng thái tiếng Việt/Anh phổ biến, bot cũng nhận diện chính xác tên giao thành công và hỗ trợ dữ liệu đã lưu từ bản cũ.
 - `${GHN_TOKEN}` lấy từ môi trường hoặc `.env`, không ghi token vào JSON được commit. Thiếu biến sẽ báo rõ tên biến, không in token.
 - Có thể đặt `{tracking_number}` trong endpoint/body/query/header. Mã đã được giới hạn ký tự nên không chứa ký tự phân tách URL.
 - Đường dẫn `events_path` phải trả về **toàn bộ các mốc cần theo dõi**. Nếu API cần phân trang, chữ ký, login hoặc đổi token nhiều bước, hãy mở rộng `track()` trong class hãng đó để gom trang/xác thực trước khi gọi `parse()`.

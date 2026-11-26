@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 — 26/11/2026
+
+- Tự xóa đơn giao thành công sau khi Telegram nhận đủ các thông báo đang chờ, bao gồm thông báo cuối.
+- Giữ đơn và outbox khi Telegram lỗi/rate-limit; tiếp tục gửi lại sau khi khởi động lại.
+- Dọn cả đơn giao thành công đã lưu từ phiên bản cũ; giữ nguyên các đơn đang giao, hủy và hoàn hàng.
+- Phân biệt kết quả giao thành công với trạng thái terminal; thêm `delivered_codes` cho adapter JSON cấu hình được.
+- Dữ liệu đơn, lịch sử cục bộ và thông tin xác thực được xóa theo đơn. Có thể tra cứu lại trực tiếp từ API bằng `/check` hoặc `/history`.
+- 94 bài kiểm thử tự động đã đạt, bao gồm thứ tự gửi trước khi xóa, retry/rate-limit, dữ liệu bản cũ và tách đơn theo chủ sở hữu.
+
 ## 0.2.0 — 26/11/2026
 
 - Thêm adapter J&T Express Việt Nam dùng endpoint tracking HTML chính thức và BeautifulSoup.

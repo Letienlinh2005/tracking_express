@@ -285,6 +285,31 @@ class Database:
         with self.connect() as db:
             db.execute("UPDATE outbox SET delivered_at=? WHERE id=?", (time.time(), message_id))
 
+    def prune_delivered(self, shipment_id: int | None = None) -> int:
+        """Remove successful deliveries only after every queued notification is acknowledged."""
+        removed = 0
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            candidates = db.execute(
+                """SELECT s.id,s.last_event_json FROM shipments s
+                   WHERE s.completed=1 AND s.last_event_json IS NOT NULL
+                   AND (? IS NULL OR s.id=?)
+                   AND NOT EXISTS (
+                       SELECT 1 FROM outbox o WHERE o.shipment_id=s.id AND o.delivered_at IS NULL
+                   )""",
+                (shipment_id, shipment_id),
+            ).fetchall()
+            for row in candidates:
+                try:
+                    delivered = TrackingEvent.from_json(
+                        row["last_event_json"]
+                    ).delivered_successfully
+                except (ValueError, TypeError):
+                    continue
+                if delivered:
+                    removed += db.execute("DELETE FROM shipments WHERE id=?", (row["id"],)).rowcount
+        return removed
+
     def retry_message(self, message_id: int, attempts: int, delay: float) -> None:
         with self.connect() as db:
             db.execute(
