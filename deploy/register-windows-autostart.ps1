@@ -6,13 +6,17 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $projectDirectory = Split-Path -Parent $PSScriptRoot
-$pythonExecutable = Join-Path $projectDirectory '.venv\Scripts\pythonw.exe'
+$venvPython = Join-Path $projectDirectory '.venv\Scripts\python.exe'
 $runnerScript = Join-Path $PSScriptRoot 'windows_runner.pyw'
 $taskName = 'Express Telegram Tracker'
 $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 
-if (-not (Test-Path -LiteralPath $pythonExecutable)) {
-    throw "Python environment not found: $pythonExecutable"
+if (-not (Test-Path -LiteralPath $venvPython)) {
+    throw "Python environment not found: $venvPython"
+}
+$pythonExecutable = & $venvPython -c "import pathlib,sys; print(pathlib.Path(sys.base_prefix) / 'pythonw.exe')"
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $pythonExecutable)) {
+    throw 'The virtual environment base interpreter has no pythonw.exe.'
 }
 if (-not (Test-Path -LiteralPath (Join-Path $projectDirectory '.env'))) {
     throw 'Create .env and configure TELEGRAM_BOT_TOKEN first.'
@@ -28,9 +32,10 @@ if ($WaitForPid -gt 0) {
 $action = New-ScheduledTaskAction -Execute $pythonExecutable -Argument $runnerArguments -WorkingDirectory $projectDirectory
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $identity.User.Value
 $trigger.Delay = 'PT30S'
+$recoveryTrigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1)) -RepetitionInterval (New-TimeSpan -Minutes 1)
 $principal = New-ScheduledTaskPrincipal -UserId $identity.User.Value -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RunOnlyIfNetworkAvailable
-$task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Run the Telegram parcel tracker hidden, 30 seconds after this user signs in. Restart after failures.'
+$task = New-ScheduledTask -Action $action -Trigger @($trigger, $recoveryTrigger) -Principal $principal -Settings $settings -Description 'Run the Telegram parcel tracker hidden at sign-in; recover a stopped task every minute. Ignore new launches while already running.'
 
 Register-ScheduledTask -TaskName $taskName -InputObject $task -Force | Select-Object TaskName, State
-Write-Output 'Registered. The bot will start at the next sign-in; the current manually started bot is left running.'
+Write-Output 'Registered. Starts at sign-in and checks every minute for a stopped task. Running instances are left alone.'

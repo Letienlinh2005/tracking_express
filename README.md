@@ -96,9 +96,11 @@ Chạy PowerShell trong thư mục dự án:
 .\deploy\register-windows-autostart.ps1
 ```
 
-Script đăng ký task **Express Telegram Tracker** cho tài khoản Windows hiện tại. Bot tự chạy ẩn bằng `pythonw.exe` sau khi đăng nhập khoảng 30 giây và có mạng, không cần mở PowerShell. Task không giới hạn thời gian chạy, không dừng vì chuyển sang pin, bỏ qua lần khởi chạy trùng của chính task và thử khởi động lại sau 1 phút nếu tiến trình lỗi (tối đa 999 lần). Không lưu mật khẩu tài khoản Windows.
+Script đăng ký task **Express Telegram Tracker** cho tài khoản Windows hiện tại. Bot tự chạy ẩn bằng `pythonw.exe` sau khi đăng nhập khoảng 30 giây và có mạng, không cần mở PowerShell. Task không giới hạn thời gian chạy, không dừng vì chuyển sang pin, bỏ qua lần khởi chạy trùng của chính task và thử khởi động lại sau 1 phút nếu tiến trình lỗi (tối đa 999 lần). Một trigger lặp mỗi phút cũng khởi động lại task đã dừng, kể cả trường hợp Windows ghi nhận tiến trình bị hủy thay vì lỗi ứng dụng. Khi task đang chạy, trigger này bị bỏ qua nên không mở thêm bot. Không lưu mật khẩu tài khoản Windows.
 
 Task được tạo ở trạng thái sẵn sàng và sẽ chạy từ lần đăng nhập kế tiếp; script không mở thêm bot khi phiên chạy thủ công còn hoạt động. Sau khi task đã tự chạy, không chạy thêm `python -m tracker` bằng tay với cùng token. Khi tắt máy, ngủ hoặc đăng xuất thì bot ngừng hoạt động; việc chỉ khóa màn hình vẫn giữ bot chạy. Đây là lịch **khi đăng nhập**, không chạy trước màn hình đăng nhập.
+
+Task dùng trực tiếp `pythonw.exe` của bản Python nền tương ứng với `.venv`, nạp thư viện từ `.venv/Lib/site-packages` và tách console trong launcher. Cách này tránh trường hợp launcher của môi trường ảo chuyển sang `python.exe` có console. Có thể đóng CMD/PowerShell sau khi task đang chạy; log `Hidden launcher console attached: False` xác nhận bot không gắn với cửa sổ lệnh.
 
 Kết nối Telegram có timeout 30 giây và được thử lại khi khởi động. Nếu lỗi mạng vẫn kéo dài, tiến trình chạy ẩn giữ trạng thái sống và thử khởi động lại sau 30 giây, thay vì thoát ngay khi mạng vừa lên chậm. Log `Registered Telegram commands: ... /history ...` và `Application started` xác nhận bản mới đã đăng ký lệnh và bắt đầu xử lý.
 
@@ -122,7 +124,7 @@ Disable-ScheduledTask -TaskName 'Express Telegram Tracker'
 Enable-ScheduledTask -TaskName 'Express Telegram Tracker'
 ```
 
-Vô hiệu hóa task chỉ ngăn lần chạy tiếp theo. Muốn dừng task đang chạy, dùng `Stop-ScheduledTask -TaskName 'Express Telegram Tracker'`. Nếu di chuyển thư mục dự án, chạy lại script đăng ký ở vị trí mới để cập nhật đường dẫn.
+Muốn dừng hẳn bot, chạy `Disable-ScheduledTask -TaskName 'Express Telegram Tracker'` rồi `Stop-ScheduledTask -TaskName 'Express Telegram Tracker'`. Nếu chỉ dùng `Stop-ScheduledTask`, trigger khôi phục sẽ bật lại bot trong khoảng một phút khi bạn vẫn đăng nhập và có mạng. Nếu di chuyển thư mục dự án, chạy lại script đăng ký ở vị trí mới để cập nhật đường dẫn.
 
 ## Chạy nhanh trên Linux
 

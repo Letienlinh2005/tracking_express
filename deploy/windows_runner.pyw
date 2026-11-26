@@ -4,18 +4,24 @@ import argparse
 import ctypes
 import logging
 import os
+import site
 import sys
 import time
 from ctypes import wintypes
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from dotenv import load_dotenv
-
 ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 sys.path.insert(0, str(ROOT))
-load_dotenv(ROOT / ".env")
+# Launch the real GUI interpreter rather than a venv redirector that can spawn python.exe.
+# Load this project's dependencies from its venv while using the same base Python version.
+venv_packages = ROOT / ".venv" / "Lib" / "site-packages"
+if venv_packages.is_dir():
+    sys.path.insert(0, str(venv_packages))
+    site.addsitedir(str(venv_packages))
+if os.name == "nt":
+    ctypes.WinDLL("kernel32").FreeConsole()
 
 
 class SafeFormatter(logging.Formatter):
@@ -62,6 +68,9 @@ def wait_for_previous_bot(pid: int, created: int) -> None:
 
 
 def run(wait_pid: int = 0, wait_created: int = 0) -> None:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT / ".env")
     log_directory = ROOT / "data" / "logs"
     log_directory.mkdir(parents=True, exist_ok=True)
     handler = RotatingFileHandler(
@@ -69,6 +78,10 @@ def run(wait_pid: int = 0, wait_created: int = 0) -> None:
     )
     handler.setFormatter(SafeFormatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), handlers=[handler], force=True)
+    if os.name == "nt":
+        kernel = ctypes.WinDLL("kernel32")
+        kernel.GetConsoleWindow.restype = wintypes.HWND
+        logging.info("Hidden launcher console attached: %s", bool(kernel.GetConsoleWindow()))
     from telegram.error import NetworkError
 
     from tracker.__main__ import main

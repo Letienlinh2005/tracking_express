@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 — 26/11/2026
+
+- Thêm trigger Task Scheduler lặp mỗi phút để khôi phục bot bị dừng, kể cả trường hợp bị hủy với mã `0xC000013A`.
+- Giữ chế độ `IgnoreNew` để không mở bot trùng khi phiên hiện tại vẫn chạy.
+- Dùng trực tiếp GUI interpreter `pythonw.exe` cùng phiên bản với môi trường ảo, nạp thư viện của dự án và tách console để đóng CMD không kéo theo bot.
+- Bổ sung hướng dẫn vô hiệu hóa task trước khi muốn dừng bot hoàn toàn.
+
 ## 0.3.0 — 26/11/2026
 
 - Tự xóa đơn giao thành công sau khi Telegram nhận đủ các thông báo đang chờ, bao gồm thông báo cuối.
