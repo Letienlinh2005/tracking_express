@@ -1,0 +1,32 @@
+{
+  "ghn": {
+    "endpoint": null,
+    "method": "GET",
+    "params": {"tracking_code": "{tracking_number}"},
+    "headers": {},
+    "events_path": "events",
+    "newest_first": false,
+    "fields": {"time": "time", "code": "code", "status": "status", "detail": "detail", "location": "location", "next_location": "next_location"},
+    "terminal_codes": []
+  },
+  "ghtk": {
+    "endpoint": null,
+    "method": "GET",
+    "params": {"tracking_code": "{tracking_number}"},
+    "headers": {},
+    "events_path": "events",
+    "newest_first": false,
+    "fields": {"time": "time", "code": "code", "status": "status", "detail": "detail", "location": "location", "next_location": "next_location"},
+    "terminal_codes": []
+  },
+  "vtp": {
+    "endpoint": null,
+    "method": "GET",
+    "params": {"tracking_code": "{tracking_number}"},
+    "headers": {},
+    "events_path": "events",
+    "newest_first": false,
+    "fields": {"time": "time", "code": "code", "status": "status", "detail": "detail", "location": "location", "next_location": "next_location"},
+    "terminal_codes": []
+  }
+}

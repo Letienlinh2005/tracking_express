@@ -1,0 +1,29 @@
+[Unit]
+Description=Telegram Express Parcel Tracker
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=express-bot
+Group=express-bot
+WorkingDirectory=/opt/express-tracker
+EnvironmentFile=/opt/express-tracker/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/express-tracker/.venv/bin/python -m tracker
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=300
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/express-tracker/data
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

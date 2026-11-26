@@ -1,0 +1,6 @@
+python-telegram-bot[job-queue]==22.8
+APScheduler==3.11.3
+requests==2.34.2
+curl_cffi==0.17.0
+python-dotenv==1.2.4
+tzdata==2026.6
